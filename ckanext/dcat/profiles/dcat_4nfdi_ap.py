@@ -142,7 +142,7 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
             id=dataset_id + '/spectrum',
             rdf_type=DefinedTerm(id='CHMO:0000800',
                                  title='spectrum'),
-            was_generated_by=[measurement]
+            was_generated_by=[measurement] if measurement else []
         )
 
         # Instantiate the analysis of the spectrum
