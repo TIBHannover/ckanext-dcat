@@ -66,6 +66,7 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
 
     def parse_dataset(self, dataset_dict, dataset_ref):
         # TODO: Create a parser
+        log.debug('parsing dataset for test ')
         dataset_dict['title'] = str(dataset_ref.value(DCT.title))
         dataset_dict['notes'] = str(dataset_ref.value(DCT.description))
         dataset_dict['doi'] = str(dataset_ref.value(DCT.identifier))
