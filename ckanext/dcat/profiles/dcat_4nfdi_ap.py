@@ -124,40 +124,71 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
             ]
         )
 
+        # # Instantiate the measurement process/activity
+        # measurement = None
+        # if dataset_dict.get('measurement_technique_iri'):
+        #     measurement = DataCreatingActivity(
+        #         rdf_type=DefinedTerm(
+        #             id=dataset_dict.get('measurement_technique_iri'),
+        #             title=dataset_dict.get('measurement_technique')),
+        #         evaluated_entity=[sample]
+        #     )
+        #
+        #
+        #
+        # # Instantiate the spectrum that was analysed by the measurement with a fake ID, as it does not have one,
+        # # but the ID is a mandatory slot for an AnalysisSourceData (which is a EvaluatedEntity)
+        # # Hardcode the rdf_type, as this is necessary in the domain agnostic version of our DCAT-AP extension
+        # if measurement is not None:
+        #     spectrum = AnalysisSourceData(
+        #         id=dataset_id + '/spectrum',
+        #         rdf_type=DefinedTerm(id='CHMO:0000800',
+        #                          title='spectrum'),
+        #         #was_generated_by=[measurement]
+        #         was_generated_by = measurement # list is making an error so tryin g to fix
+        # )
+        #
+        # # Instantiate the analysis of the spectrum
+        # # Hardcode the rdf_type, as this is necessary in this domain agnostic version of our DCAT-AP extension
+        # analysis = DataAnalysis(
+        #     rdf_type=DefinedTerm(
+        #         id='http://purl.allotrope.org/ontologies/process#AFP_0003618',
+        #         title='peak identification'),
+        #     evaluated_entity=[spectrum])
+
+
         # Instantiate the measurement process/activity
         measurement = None
         if dataset_dict.get('measurement_technique_iri'):
             measurement = DataCreatingActivity(
                 rdf_type=DefinedTerm(
-                    id=dataset_dict.get('measurement_technique_iri'),
-                    title=dataset_dict.get('measurement_technique')),
+                    id=dataset_dict['measurement_technique_iri'],
+                    title=dataset_dict.get('measurement_technique')
+                ),
                 evaluated_entity=[sample]
             )
 
-
-
-        # Instantiate the spectrum that was analysed by the measurement with a fake ID, as it does not have one,
-        # but the ID is a mandatory slot for an AnalysisSourceData (which is a EvaluatedEntity)
-        # Hardcode the rdf_type, as this is necessary in the domain agnostic version of our DCAT-AP extension
-        if measurement is not None:
-            spectrum = AnalysisSourceData(
-                id=dataset_id + '/spectrum',
-                rdf_type=DefinedTerm(id='CHMO:0000800',
-                                 title='spectrum'),
-                #was_generated_by=[measurement]
-                was_generated_by = measurement # list is making an error so tryin g to fix
+        # Instantiate the spectrum that was analysed by the measurement with a fake ID
+        spectrum_kwargs = dict(
+            id=f"{dataset_id}/spectrum",
+            rdf_type=DefinedTerm(id='CHMO:0000800', title='spectrum')
         )
+        if measurement is not None:
+            # Pass a single term, not a list
+            spectrum_kwargs['was_generated_by'] = measurement
 
-        # Instantiate the analysis of the spectrum
-        # Hardcode the rdf_type, as this is necessary in this domain agnostic version of our DCAT-AP extension
+        spectrum = AnalysisSourceData(**spectrum_kwargs)
+
+        # Instantiate the analysis of the spectrum (expects a list)
         analysis = DataAnalysis(
             rdf_type=DefinedTerm(
                 id='http://purl.allotrope.org/ontologies/process#AFP_0003618',
-                title='peak identification'),
-            evaluated_entity=[spectrum])
+                title='peak identification'
+            ),
+            evaluated_entity=[spectrum]
+        )
 
-
-# TODO: Empty Values are to be tested, to check if it is NONE or not
+        # TODO: Empty Values are to be tested, to check if it is NONE or not
 
         if dataset_dict.get('notes'):
             description = dataset_dict.get('notes')
