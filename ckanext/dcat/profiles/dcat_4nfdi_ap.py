@@ -125,6 +125,7 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
         )
 
         # Instantiate the measurement process/activity
+        measurement = None
         if dataset_dict.get('measurement_technique_iri'):
             measurement = DataCreatingActivity(
                 rdf_type=DefinedTerm(
@@ -138,12 +139,13 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
         # Instantiate the spectrum that was analysed by the measurement with a fake ID, as it does not have one,
         # but the ID is a mandatory slot for an AnalysisSourceData (which is a EvaluatedEntity)
         # Hardcode the rdf_type, as this is necessary in the domain agnostic version of our DCAT-AP extension
-        spectrum = AnalysisSourceData(
-            id=dataset_id + '/spectrum',
-            rdf_type=DefinedTerm(id='CHMO:0000800',
+        if measurement is not None:
+            spectrum = AnalysisSourceData(
+                id=dataset_id + '/spectrum',
+                rdf_type=DefinedTerm(id='CHMO:0000800',
                                  title='spectrum'),
-            #was_generated_by=[measurement]
-            was_generated_by = measurement # list is making an error so tryin g to fix
+                #was_generated_by=[measurement]
+                was_generated_by = measurement # list is making an error so tryin g to fix
         )
 
         # Instantiate the analysis of the spectrum
