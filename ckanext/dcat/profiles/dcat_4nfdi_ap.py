@@ -103,7 +103,7 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
                         id='CHEMINF:000059',
                         title='InChiKey'),
                     title='assigned InChiKey',
-                    value=dataset_dict.get('inchi_key')),
+                    value=dataset_dict.get('inchi_key') or "not available"),
                 QualitativeAttribute(
                     rdf_type=DefinedTerm(
                         id='CHEMINF:000113',
