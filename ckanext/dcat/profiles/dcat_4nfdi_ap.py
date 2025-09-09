@@ -94,6 +94,7 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
         # Instantiate the evaluated sample
         # TODO: We used a fake ID, as the real one is not within the example dataset, but might be in the source data.
         # TODO: Do we need different instantiation steps/conditions based on where the metadata comes from?
+
         sample = EvaluatedEntity(
             id=dataset_id + '/sample',
             has_qualitative_attribute=[
@@ -120,7 +121,7 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
                         id='CHEMINF:000037',
                         title='IUPACChemicalFormula'),
                     title='assigned IUPACChemicalFormula',
-                    value= dataset_dict.get('mol_formula') )
+                    value= dataset_dict.get('mol_formula') or "not available" )
             ]
         )
 
