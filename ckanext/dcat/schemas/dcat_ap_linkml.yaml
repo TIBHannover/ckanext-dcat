@@ -2008,7 +2008,7 @@ classes:
     description: See [DCAT-AP specs:Standard](https://semiceu.github.io/DCAT-AP/releases/3.0.0/#Standard)
     is_a: SupportiveEntity
     slots:
-    - identifier
+    - id
     slot_usage:
       identifier:
         required: true

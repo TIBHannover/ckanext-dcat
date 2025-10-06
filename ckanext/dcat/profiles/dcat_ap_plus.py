@@ -7,17 +7,17 @@ import ckantoolkit as toolkit
 # from ckan.lib.munge import munge_tag
 import logging
 
-from ckanext.dcat.profiles.dcat_4c_ap import (Agent,
-                        AnalysisDataset,
-                        AnalysisSourceData,
-                        DataAnalysis,
-                        Activity as DataCreatingActivity,
-                        DefinedTerm,
-                        Document,
-                        EvaluatedEntity,
-                        LinguisticSystem,
-                        Standard,
-                        QualitativeAttribute)
+from ckanext.dcat.profiles.chem_dcat_ap import (Agent,
+                                                AnalysisDataset,
+                                                AnalysisSourceData,
+                                                DataAnalysis,
+                                                Activity as DataCreatingActivity,
+                                                DefinedTerm,
+                                                Document,
+                                                EvaluatedEntity,
+                                                LinguisticSystem,
+                                                Standard,
+                                                QualitativeAttribute)
 from . import EuropeanDCATAPProfile, EuropeanDCATAP2Profile
 
 log = logging.getLogger(__name__)
@@ -164,12 +164,12 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
             description=dataset_dict.get('notes') or 'No description',
             was_generated_by=analysis,
             identifier=dataset_id,
-            # REMOVE: describes_entity=sample,
-            # conforms_to=Standard(
-            #     id='https://docs.nmrxiv.org/submission-guides/data-model/spectra.html'
-            # )
+            is_about_entity = sample,
+            conforms_to = Standard(
+                id='https://docs.nmrxiv.org/submission-guides/data-model/spectra.html'
+            ))
 
-        )
+        # )
 
         creators = []
         try:

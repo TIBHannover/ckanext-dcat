@@ -2264,7 +2264,7 @@ class Standard(SupportiveEntity):
     class_class_curie: ClassVar[str] = "dcterms:Standard"
     class_name: ClassVar[str] = "Standard"
     class_model_uri: ClassVar[URIRef] = DCAT_4C_AP.Standard
-
+    id: Optional[URIorCURIE] = None
     title: Optional[str] = None
     description: Optional[str] = None
 
