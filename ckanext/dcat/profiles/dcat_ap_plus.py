@@ -7,17 +7,17 @@ import ckantoolkit as toolkit
 # from ckan.lib.munge import munge_tag
 import logging
 
-from ckanext.dcat.profiles.chem_dcat_ap import (Agent,
-                                                AnalysisDataset,
-                                                AnalysisSourceData,
-                                                DataAnalysis,
-                                                Activity as DataCreatingActivity,
-                                                DefinedTerm,
-                                                Document,
-                                                EvaluatedEntity,
-                                                LinguisticSystem,
-                                                Standard,
-                                                QualitativeAttribute)
+from ckanext.dcat.profiles.dcat_4c_ap import (Agent,
+                                              AnalysisDataset,
+                                              AnalysisSourceData,
+                                              DataAnalysis,
+                                              Activity as DataCreatingActivity,
+                                              DefinedTerm,
+                                              Document,
+                                              EvaluatedEntity,
+                                              LinguisticSystem,
+                                              Standard,
+                                              QualitativeAttribute)
 from . import EuropeanDCATAPProfile, EuropeanDCATAP2Profile
 
 log = logging.getLogger(__name__)
