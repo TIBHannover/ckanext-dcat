@@ -103,8 +103,8 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
                         id='CHEMINF:000059',
                         title='InChiKey'),
                     title='assigned InChiKey',
-                    value=dataset_dict.get('inchi_key')),
-                QualitativeAttribute(   
+                    value=dataset_dict.get('inchi_key') or "not available"),
+                QualitativeAttribute(
                     rdf_type=DefinedTerm(
                         id='CHEMINF:000113',
                         title='InChi'),
@@ -226,7 +226,7 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
             if measurement is not None:
                 nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(measurement, schemaview=schemaview)
 
-        except ValueError as e:
+        except Exception as e:
             log.warning("DCAT-AP-PLUS serialization skipped: %s", e)
             return None
 
