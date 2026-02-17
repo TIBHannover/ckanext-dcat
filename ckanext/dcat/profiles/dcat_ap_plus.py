@@ -218,12 +218,17 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
         rdf_nfdi_dumper = RDFLibDumper()
 
         # Dump each LinkML object you want in the graph
-        nfdi_graph = rdf_nfdi_dumper.as_rdf_graph(dataset, schemaview=schemaview)
-        nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(sample, schemaview=schemaview)
-        nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(analysis, schemaview=schemaview)
-        nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(spectrum, schemaview=schemaview)
-        if measurement is not None:
-            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(measurement, schemaview=schemaview)
+        try:
+            nfdi_graph = rdf_nfdi_dumper.as_rdf_graph(dataset, schemaview=schemaview)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(sample, schemaview=schemaview)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(analysis, schemaview=schemaview)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(spectrum, schemaview=schemaview)
+            if measurement is not None:
+                nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(measurement, schemaview=schemaview)
+
+        except ValueError as e:
+            log.warning("DCAT-AP-PLUS serialization skipped: %s", e)
+            return None
 
         # Now add the link between dataset and sample using rdflib (choose the predicate you want)
         from rdflib import URIRef, BNode
