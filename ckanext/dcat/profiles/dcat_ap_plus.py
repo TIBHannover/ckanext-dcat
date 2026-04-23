@@ -194,13 +194,19 @@ class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
         schemaview = SchemaView(schema="/usr/lib/ckan/default/src/ckanext-dcat/ckanext/dcat/schemas/dcat_4c_ap.yaml")
         rdf_nfdi_dumper = RDFLibDumper()
 
+        prefix_map = {'@base': 'https://search.nfdi4chem.de/dataset/',
+                      'CHEMINF': 'http://semanticscience.org/resource/CHEMINF_',
+                      'CHMO': 'http://purl.obolibrary.org/obo/CHMO_',
+                      'CHEBI': 'http://purl.obolibrary.org/obo/CHEBI_'
+                      }
+
         try:
-            nfdi_graph = rdf_nfdi_dumper.as_rdf_graph(dataset, schemaview=schemaview)
-            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(sample, schemaview=schemaview)
-            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(analysis, schemaview=schemaview)
-            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(spectrum, schemaview=schemaview)
+            nfdi_graph = rdf_nfdi_dumper.as_rdf_graph(dataset, schemaview=schemaview, prefix_map=prefix_map)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(sample, schemaview=schemaview, prefix_map = prefix_map)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(analysis, schemaview=schemaview, prefix_map=prefix_map)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(spectrum, schemaview=schemaview, prefix_map=prefix_map )
             if measurement is not None:
-                nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(measurement, schemaview=schemaview)
+                nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(measurement, schemaview=schemaview, prefix_map=prefix_map)
         except Exception as e:
             log.warning("DCAT-AP-PLUS serialization skipped: %s", e)
             return None

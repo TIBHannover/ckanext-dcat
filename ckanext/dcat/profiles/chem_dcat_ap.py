@@ -102,6 +102,35 @@ class ChemDCATAPProfile(EuropeanDCATAPProfile):
             log.error(e)
         return creators
 
+
+
+    def _get_pubchem_cid(self,inchi_key=None, smiles=None):
+        key = inchi_key or smiles
+        _pubchem_cache = {}
+        if key in _pubchem_cache:
+            return _pubchem_cache[key]
+
+        try:
+            if inchi_key:
+                url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{inchi_key}/cids/TXT"
+            elif smiles:
+                url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/cids/TXT"
+            else:
+                return None
+
+            r = requests.get(url, timeout=5)
+
+            if r.status_code == 200:
+                cid = r.text.strip().split("\n")[0]
+                _pubchem_cache[key] = cid
+                return cid
+
+        except Exception:
+            return None
+
+        _pubchem_cache[key] = None
+        return None
+
 # TODO: Think about which namespaces shouldbe passed to the RDFLibDumper as prefix_map for those prefixes that are
 #  not already part of the DCAT-AP schema YAMLs. Should probably just be a Python dict maintained in this profile.
 
@@ -118,8 +147,18 @@ class ChemDCATAPProfile(EuropeanDCATAPProfile):
         # -------------------------
         # Compound
         # -------------------------
+        inchi_key = dataset_dict.get("inchi_key")
+        smiles = dataset_dict.get("smiles")
+
+        cid = self._get_pubchem_cid(inchi_key= inchi_key, smiles=smiles)
+
+        if cid:
+            compound_id = f"https://pubchem.ncbi.nlm.nih.gov/compound/{cid}"
+        else:
+            compound_id = f"{dataset_id}#sample_compound"
+
         compound_kwargs = {
-            "id": f"{dataset_id}#sample_compound",
+            "id": compound_id,
         }
 
         if dataset_dict.get("inchi_key"):
@@ -205,11 +244,17 @@ class ChemDCATAPProfile(EuropeanDCATAPProfile):
 
         rdf_nfdi_dumper = RDFLibDumper()
 
+        prefix_map = {'@base': 'https://search.nfdi4chem.de/dataset/',
+                      'CHEMINF': 'http://semanticscience.org/resource/CHEMINF_',
+                      'CHMO': 'http://purl.obolibrary.org/obo/CHMO_',
+                      'CHEBI': 'http://purl.obolibrary.org/obo/CHEBI_'
+                      }
+
         try:
-            nfdi_graph = rdf_nfdi_dumper.as_rdf_graph(dataset_chem, schemaview=sv_chem_dcat_ap)
-            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(sample_chem, schemaview=sv_chem_dcat_ap)
-            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(compound_chem, schemaview=sv_chem_dcat_ap)
-            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(measurement_chem, schemaview=sv_chem_dcat_ap)
+            nfdi_graph = rdf_nfdi_dumper.as_rdf_graph(dataset_chem, schemaview=sv_chem_dcat_ap, prefix_map = prefix_map)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(sample_chem, schemaview=sv_chem_dcat_ap, prefix_map = prefix_map)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(compound_chem, schemaview=sv_chem_dcat_ap, prefix_map = prefix_map)
+            nfdi_graph += rdf_nfdi_dumper.as_rdf_graph(measurement_chem, schemaview=sv_chem_dcat_ap, prefix_map = prefix_map)
         except Exception as e:
             log.warning("ChemDCAT-AP serialization skipped: %s", e)
             return None
@@ -229,7 +274,7 @@ class ChemDCATAPProfile(EuropeanDCATAPProfile):
         self.g.add((dataset_node, RDF.type, CHEMDCATAP.SubstanceSampleCharacterizationDataset))
 
         # explicit sample/compound relation in case dumper misses it
-        self.g.add((sample_node, URIRef("http://purl.obolibrary.org/obo/BFO_0000051"), compound_node))
+        #self.g.add((sample_node, URIRef("http://purl.obolibrary.org/obo/BFO_0000051"), compound_node))
 
         # keep DCAT relation
         self.g.add((dataset_node, PROV.wasGeneratedBy, measurement_node))
