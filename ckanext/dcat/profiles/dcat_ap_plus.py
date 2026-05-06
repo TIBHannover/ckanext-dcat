@@ -1,4 +1,5 @@
 import json
+import os
 from decimal import Decimal, DecimalException
 import requests
 from rdflib import term, URIRef, BNode, Literal, Graph
@@ -7,6 +8,10 @@ import ckantoolkit as toolkit
 # from ckan.lib.munge import munge_tag
 import logging
 
+# NOTE: We import dataclasses from 'dcat_4c_ap' (local copy) instead of the
+# official pip packages because the server runs Python 3.7, while the
+# official packages require Python >3.9. Once the server is upgraded,
+# revert to: from dcat_ap_plus.datamodel.dcat_ap_plus import ...
 from ckanext.dcat.profiles.dcat_4c_ap import (Agent,
                                               Concept,
                                               Dataset,
@@ -59,290 +64,421 @@ from .base import (
 from linkml_runtime.dumpers import RDFLibDumper
 from linkml_runtime.utils.schemaview import SchemaView
 
+# Module-level cache for SchemaView instances
+# Key: schema_name, Value: SchemaView object
+_SCHEMA_VIEW_CACHE = {}
 
-class DCATNFDi4ChemProfile(EuropeanDCATAPProfile):
+
+class Helpers(object):
     """
-    An RDF profile extending DCAT-AP for NFDI4Chem
+    Mixin class containing shared helper methods for DCAT-AP+ and ChemDCAT-AP profiles.
+    Handles data extraction, normalization, schema loading, and LinkML object instantiation.
+    """
+
+    # Class-level cache for PubChem CID lookups (persists across requests in a worker)
+    _pubchem_cache = {}
+    _CACHE_MAX_SIZE = 500
+
+    def _get_schema_view(self, schema_name, local_filename, purl):
+        """
+        UNIVERSAL Schema Loader.
+        Loads a SchemaView with a robust fallback strategy:
+        1. Memory Cache
+        2. Local File (Sibling 'schemas' folder)
+        3. Remote PURL
+
+        Args:
+            schema_name: Unique key for caching (e.g., 'dcat_ap_plus')
+            local_filename: Name of the YAML file (e.g., 'dcat_ap_plus.yaml')
+            purl: Remote URL fallback
+
+        Returns: SchemaView instance or None
+        """
+        # 1. Check Memory Cache
+        if schema_name in _SCHEMA_VIEW_CACHE:
+            return _SCHEMA_VIEW_CACHE[schema_name]
+
+        schema_content = None
+        source = ""
+
+        # 2. Dynamic Path Calculation (Works for both profiles)
+        # Assumes: profiles/profile.py and schemas/file.yaml are siblings
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        local_yaml_path = os.path.normpath(os.path.join(current_dir, "..", "schemas", local_filename))
+
+        # 3. Try Local File
+        try:
+            with open(local_yaml_path, 'r') as f:
+                schema_content = f.read()
+                source = "local file"
+                log.info(f"Loaded schema '{schema_name}' from local: {local_yaml_path}")
+        except FileNotFoundError:
+            log.warning(f"Local schema not found: {local_yaml_path}. Trying remote...")
+        except Exception as e:
+            log.error(f"Error reading local schema {local_yaml_path}: {e}")
+
+        # 4. Try Remote PURL
+        if not schema_content:
+            try:
+                log.debug(f"Fetching schema '{schema_name}' from PURL: {purl}")
+                resp = requests.get(purl, headers={"Accept": "application/yaml, text/yaml"}, timeout=10)
+                resp.raise_for_status()
+                schema_content = resp.text
+                source = "remote PURL"
+            except Exception as e:
+                log.error(f"Failed to fetch schema '{schema_name}' from remote: {e}")
+                return None
+
+        # 5. Parse and Cache
+        if schema_content:
+            try:
+                sv = SchemaView(schema_content, merge_imports=True)
+                _SCHEMA_VIEW_CACHE[schema_name] = sv
+                log.info(f"Schema '{schema_name}' loaded from {source} and cached.")
+                return sv
+            except Exception as e:
+                log.error(f"Failed to parse schema '{schema_name}': {e}")
+                return None
+
+        return None
+
+    def _get_pubchem_cid(self, inchi_key=None, smiles=None):
+        """
+        Fetches CID from PubChem with a class-level cache.
+        """
+        key = None
+        if inchi_key:
+            key = inchi_key.strip().upper()
+        elif smiles:
+            key = smiles.strip()
+
+        if not key:
+            return None
+
+        if key in self._pubchem_cache:
+            return self._pubchem_cache[key]
+
+        cid = None
+        try:
+            suffix = f"inchikey/{key}" if inchi_key else f"smiles/{key}"
+            url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/{suffix}/cids/TXT"
+            resp = requests.get(url, headers={"Accept": "text/plain"}, timeout=3)
+            if resp.status_code == 200 and resp.text.strip():
+                result = resp.text.strip().split("\n")[0]
+                if result.isdigit():
+                    cid = result
+        except Exception:
+            pass
+
+        self._pubchem_cache[key] = cid
+
+        # Simple rotation if cache gets too big
+        if len(self._pubchem_cache) > self._CACHE_MAX_SIZE:
+            keys_to_remove = list(self._pubchem_cache.keys())[:100]
+            for k in keys_to_remove:
+                del self._pubchem_cache[k]
+
+        return cid
+
+
+    def _get_authors(self, dataset_dict):
+        """
+        Parses the author string into a list of Agent objects.
+        Handles various formats: "Last, First", "Last, Initial", or lists of names.
+        TODO:
+            * Search Service should normalize the authors/creators to an object with first name, last name and PID.
+            * DCAT-AP plus needs better handling for this, see: https://github.com/nfdi-de/dcat-ap-plus/issues/84
+
+        Args:
+            dataset_dict: The dataset metadata dictionary.
+
+        Returns:
+            A list of Agent objects representing the creators.
+        """
+        creators = []
+        author_string = dataset_dict.get("author")
+
+        if not author_string or not isinstance(author_string, str):
+            return creators
+
+        fragments = [f.strip() for f in author_string.split(",") if f.strip()]
+        if not fragments:
+            return creators
+
+        is_single_author = (
+                len(fragments) == 2 and
+                len(fragments[1]) > 2 and
+                fragments[1].replace(".", "").isalpha() and
+                " " not in fragments[0]
+        )
+
+        full_names = []
+        if is_single_author:
+            full_names.append(f"{fragments[0]} {fragments[1]}")
+        else:
+            for fragment in fragments:
+                clean_frag = fragment.strip()
+                if not clean_frag:
+                    continue
+                is_likely_initial = len(clean_frag) <= 2 and clean_frag.replace(".", "").isalpha()
+                if is_likely_initial and full_names:
+                    last_name = full_names.pop()
+                    full_names.append(f"{last_name} {clean_frag}")
+                else:
+                    full_names.append(clean_frag)
+
+        for name in full_names:
+            if name.endswith("."):
+                parts = name.split()
+                if parts and len(parts[-1]) > 3:
+                    name = name[:-1]
+            name = " ".join(name.split())
+            if name:
+                creators.append(Agent(
+                    name=name,
+                    type=Concept(preferred_label='person', description='A human being.')
+                ))
+
+        return creators
+
+    def _get_dataset_id(self, dataset_dict):
+        """Constructs the canonical Dataset IRI."""
+        if dataset_dict.get("doi"):
+            return f"https://doi.org/{dataset_dict.get('doi')}"
+        raw_id = dataset_dict.get("id", "").strip()
+        return f"https://search.nfdi4chem.de/dataset/{raw_id}"
+
+    def _get_compound_id(self, dataset_dict, dataset_id):
+        """Resolves the Compound IRI (PubChem CID or local fragment)."""
+        cid = self._get_pubchem_cid(dataset_dict.get("inchi_key"), dataset_dict.get("smiles"))
+        if cid:
+            return f"https://pubchem.ncbi.nlm.nih.gov/compound/{cid}"
+        return f"{dataset_id}#sample_compound"
+
+    def _get_description(self, dataset_dict):
+        """Extracts and cleans the description."""
+        desc = dataset_dict.get('notes')
+        return desc.strip() if desc else 'No description'
+
+    def _get_language(self, dataset_dict):
+        """Normalizes language code and returns a LinguisticSystem object."""
+        raw = (dataset_dict.get('language') or 'en').strip().lower()
+        code = 'de' if raw in ('deutsch', 'german', 'de') else 'en'
+        return LinguisticSystem(title=code, description=f"http://id.loc.gov/vocabulary/iso639-1/{code}")
+
+    def _get_publisher(self, dataset_dict):
+        """Extracts organization info and creates a Publisher Agent."""
+        org = dataset_dict.get("organization") or {}
+        org_name = org.get("title") or org.get("display_name") or org.get("name") or "Unknown Organization"
+        return Agent(
+            name=org_name,
+            type=Concept(
+                preferred_label='Academia/Scientific organisation',
+                description='http://purl.org/adms/publishertype/Academia-ScientificOrganisation'
+            )
+        )
+
+    def _get_license(self, dataset_dict, dataset_id):
+        """Extracts license information and returns a list of LegalResource objects."""
+        if not dataset_dict.get('license_title'):
+            return []
+        title = dataset_dict['license_title']
+        license_id = dataset_dict.get('license_id')
+        license_url = dataset_dict.get('license_url')
+        url = f"{dataset_id}#license_notspecified" if (license_id == 'notspecified' or not license_url) else license_url
+        return [LegalResource(id=url, title=title)]
+
+    def _get_landing_page(self, dataset_dict):
+        """Extracts the landing page URL if valid."""
+        url = dataset_dict.get('url')
+        return [Document(id=url)] if url and "https://" in str(url) else []
+
+    def _get_measurement_technique(self, dataset_dict):
+        """Returns a tuple (iri, label) for the measurement technique."""
+        raw_iri = dataset_dict.get("measurement_technique_iri")
+        raw_label = dataset_dict.get("measurement_technique")
+        return (raw_iri or "http://purl.obolibrary.org/obo/OBI_0000070", raw_label or "assay")
+
+    def _get_dates(self, dataset_dict):
+        """Extracts and formats dates (YYYY-MM-DD)."""
+
+        def clean_date(d):
+            if not d:
+                return None
+            try:
+                return str(d).split('T')[0]
+            except Exception:
+                return None
+
+        return clean_date(dataset_dict.get('metadata_created')), clean_date(dataset_dict.get('metadata_modified'))
+
+
+
+class DCATAPPlusProfile(Helpers, EuropeanDCATAPProfile):
+    """
+    An RDF profile extending DCAT-AP for NFDI4Chem that inherits helper methods from NFDI4ChemHelpers.
 
     Extends the EuropeanDCATAPProfile to support NFDI4Chem-specific fields.
     """
 
     def parse_dataset(self, dataset_dict, dataset_ref):
         # TODO: Create a parser
-        log.debug('parsing dataset for test ')
-        dataset_dict['title'] = str(dataset_ref.value(DCT.title))
-        dataset_dict['notes'] = str(dataset_ref.value(DCT.description))
-        dataset_dict['doi'] = str(dataset_ref.value(DCT.identifier))
-        dataset_dict['language'] = [
-            str(theme.value(SKOS.prefLabel)) for theme in dataset_ref.objects(DCAT.theme)
-        ]
+        log.debug('Parsing dataset for NFDI4Chem')
+        try:
+            dataset_dict['title'] = str(dataset_ref.value(DCT.title))
+            dataset_dict['notes'] = str(dataset_ref.value(DCT.description))
+            dataset_dict['doi'] = str(dataset_ref.value(DCT.identifier))
+            dataset_dict['language'] = [
+                str(theme.value(SKOS.prefLabel)) for theme in dataset_ref.objects(DCAT.theme)
+            ]
+        except Exception as e:
+            log.error(f"Error parsing dataset: {e}")
         return dataset_dict
 
-    def _dataset_identity(self, dataset_dict):
-        # use the DOI as the IRI of a dataset
-        if dataset_dict.get("doi"):
-            dataset_id = "https://doi.org/" + dataset_dict.get("doi")
-        # if no DOI to the source repo exists, we use the Search Service ID + base prefix as IRI
-        else:
-            dataset_id = dataset_dict.get("id").strip()
-        return dataset_id
-
-    def _normalize_language_code(self, raw_lang):
-        raw_lang = (raw_lang or "").strip().lower()
-        if raw_lang in ("english", "en", "en-us", "en-gb", "eng"):
-            return "en"
-        elif raw_lang in ("deutsch", "german", "de"):
-            return "de"
-        elif raw_lang:
-            return raw_lang
-        else:
-            return "en"
-
-    def _creator_agents(self, dataset_dict):
-        creators = []
-        try:
-            if dataset_dict.get("author"):
-                for creator in dataset_dict.get("author").replace("., ", ".|").split("|"):
-                    creator = creator.strip()
-                    if creator:
-                        creators.append(Agent(name=creator,
-                                                type=Concept(preferred_label='person',
-                                                             description='A human being.')))
-            else:
-                pass
-        except Exception as e:
-
-            log.error(e)
-        return creators
-
-    def _get_pubchem_cid(self, inchi_key=None, smiles=None):
-        key = inchi_key or smiles
-        _pubchem_cache = {}
-        if key in _pubchem_cache:
-            return _pubchem_cache[key]
-
-        try:
-            if inchi_key:
-                url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{inchi_key}/cids/TXT"
-            elif smiles:
-                url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/cids/TXT"
-            else:
-                return None
-
-            r = requests.get(url, timeout=5)
-
-            if r.status_code == 200:
-                cid = r.text.strip().split("\n")[0]
-                _pubchem_cache[key] = cid
-                return cid
-
-        except Exception:
-            return None
-
-        _pubchem_cache[key] = None
-        return None
-
-    def _fetch_schema_yaml(self, purl: str) -> str:
-        '''
-        helper function to get the schema YAML files from their PURLs
-        '''
-        response = requests.get(purl, headers={"Accept": "application/yaml"}, allow_redirects=True)
-        response.raise_for_status()
-        return response.text
-
     def graph_from_dataset(self, dataset_dict, dataset_ref):
+        """
+        Generates the RDF Graph for a dataset using DCAT-AP+ classes.
+        """
 
+        # 1. Bind Prefixes
         # Question from Philip to Bhavin: why do we need this here?
         # So far we only use the prefix map passed to the RDFLibDumper
         for prefix, namespace in namespaces.items():
             self.g.bind(prefix, namespace)
 
-        dataset_id = self._dataset_identity(dataset_dict)
+        # 2. Get Core IDs using Helpers
+        dataset_id = self._get_dataset_id(dataset_dict)
+        compound_id = self._get_compound_id(dataset_dict, dataset_id)
+        sample_id = f"{dataset_id}#sample"
+        meas_id = f"{dataset_id}#measurement"
 
-        # -------------------------
-        # Compound
-        # -------------------------
-        inchi_key = dataset_dict.get("inchi_key")
-        smiles = dataset_dict.get("smiles")
+        # 3. Load Schema (Cached, using Helper with DCAT-specific args)
+        sv = self._get_schema_view(
+            schema_name="dcat_ap_plus",
+            local_filename="dcat_ap_plus.yaml",
+            purl="https://w3id.org/nfdi-de/dcat-ap-plus/"
+        )
 
-        cid = self._get_pubchem_cid(inchi_key=inchi_key, smiles=smiles)
+        if not sv:
+            log.critical("Cannot generate RDF: DCAT-AP+ Schema could not be loaded.")
+            return
 
-        if cid:
-            compound_id = f"https://pubchem.ncbi.nlm.nih.gov/compound/{cid}"
-        else:
-            compound_id = f"{dataset_id}#sample_compound"
-
+        # 4. Build Compound Entity
         compound = Entity(id=compound_id)
 
+        # Qualitative Attributes
         if dataset_dict.get("inchi_key"):
             compound.has_qualitative_attribute.append(QualitativeAttribute(
-                rdf_type=DefinedTerm(
-                    id='http://semanticscience.org/resource/CHEMINF_000059',
-                    title='InChiKey'),
+                rdf_type=DefinedTerm(id='http://semanticscience.org/resource/CHEMINF_000059', title='InChiKey'),
                 title="assigned InChIKey",
                 value=dataset_dict.get("inchi_key")
             ))
-
         if dataset_dict.get("inchi"):
             compound.has_qualitative_attribute.append(QualitativeAttribute(
-                rdf_type=DefinedTerm(
-                    id='http://semanticscience.org/resource/CHEMINF_000113',
-                    title='InChi'),
+                rdf_type=DefinedTerm(id='http://semanticscience.org/resource/CHEMINF_000113', title='InChi'),
                 title="assigned InChI",
                 value=dataset_dict.get("inchi")
             ))
-
         if dataset_dict.get("smiles"):
             compound.has_qualitative_attribute.append(QualitativeAttribute(
-                rdf_type=DefinedTerm(
-                    id='http://semanticscience.org/resource/CHEMINF_000018',
-                    title='SMILES'),
+                rdf_type=DefinedTerm(id='http://semanticscience.org/resource/CHEMINF_000018', title='SMILES'),
                 title="assigned SMILES",
                 value=dataset_dict.get("smiles")
             ))
-
         if dataset_dict.get("mol_formula"):
             compound.has_qualitative_attribute.append(QualitativeAttribute(
-                rdf_type=DefinedTerm(
-                    id='http://semanticscience.org/resource/CHEMINF_000037',
-                    title='IUPAC chemical formula'),
+                rdf_type=DefinedTerm(id='http://semanticscience.org/resource/CHEMINF_000037',
+                                     title='IUPAC chemical formula'),
                 title="assigned IUPAC chemical formula",
                 value=dataset_dict.get("mol_formula")
             ))
-
-        if dataset_dict.get("exactmass"):
-            compound.has_qualitative_attribute.append(QuantitativeAttribute(
-                rdf_type=DefinedTerm(
-                    id='http://semanticscience.org/resource/CHEMINF_000217',
-                    title='exact mass descriptor'),
-                has_quantity_type="http://qudt.org/vocab/quantitykind/MolarMass",
-                unit="https://qudt.org/vocab/unit/GM-PER-MOL",
-                title="assigned exact mass",
-                value=dataset_dict.get("exactmass")
-            ))
-
         if dataset_dict.get("iupacName"):
             compound.has_qualitative_attribute.append(QualitativeAttribute(
-                rdf_type=DefinedTerm(
-                    id='http://semanticscience.org/resource/CHEMINF_000107',
-                    title='IUPAC name'),
+                rdf_type=DefinedTerm(id='http://semanticscience.org/resource/CHEMINF_000107', title='IUPAC name'),
                 title="assigned IUPAC name",
                 value=dataset_dict.get("iupacName")
             ))
 
-        # -------------------------
-        # Sample
-        # -------------------------
+        # Quantitative Attribute (Exact Mass) - Cast to Float
+        if dataset_dict.get("exactmass"):
+            try:
+                mass_val = float(dataset_dict.get("exactmass"))
+                compound.has_quantitative_attribute.append(QuantitativeAttribute(
+                    rdf_type=DefinedTerm(id='http://semanticscience.org/resource/CHEMINF_000217',
+                                         title='exact mass descriptor'),
+                    has_quantity_type="http://qudt.org/vocab/quantitykind/MolarMass",
+                    unit="https://qudt.org/vocab/unit/GM-PER-MOL",
+                    title="exact mass",
+                    value=mass_val
+                ))
+            except (ValueError, TypeError):
+                log.warning(f"Invalid exactmass value '{dataset_dict.get('exactmass')}', skipping.")
+
+        # 5. Build Sample Entity
         sample = EvaluatedEntity(
-            id=f'{dataset_id}#sample',
+            id=sample_id,
             title='evaluated sample',
             has_part=[compound.id]
         )
 
-        # -------------------------
-        # Measurement
-        # -------------------------
-        if dataset_dict.get("measurement_technique_iri"):
-            technique_iri = dataset_dict.get("measurement_technique_iri")
-            technique_label = dataset_dict.get("measurement_technique")
-        else:
-            technique_iri = "http://purl.obolibrary.org/obo/OBI_0000070"
-            technique_label = "assay"
+        # 6. Build Measurement Activity
+        tech_iri, tech_label = self._get_measurement_technique(dataset_dict)
         measurement = DataGeneratingActivity(
-            id=f"{dataset_id}#measurement",
-            rdf_type=DefinedTerm(
-                id=technique_iri,
-                title=technique_label
-            ),
+            id=meas_id,
+            rdf_type=DefinedTerm(id=tech_iri, title=tech_label),
             evaluated_entity=[sample.id]
         )
 
-        # -------------------------
-        # Language
-        # -------------------------
-        code = self._normalize_language_code(dataset_dict.get("language"))
-        lang_uri = f"http://id.loc.gov/vocabulary/iso639-1/{code}"
-        language = LinguisticSystem(title=code,
-                                    description=lang_uri)
+        # 7. Build Dataset Object using Helpers
+        creators = self._get_authors(dataset_dict)
+        publisher = self._get_publisher(dataset_dict)
+        legislation = self._get_license(dataset_dict, dataset_id)
+        language = self._get_language(dataset_dict)
+        landing_pages = self._get_landing_page(dataset_dict)
+        release_date, mod_date = self._get_dates(dataset_dict)
 
-        # -------------------------
-        # Publisher
-        # -------------------------
-        org = dataset_dict.get("organization") or {}
-        org_name = org.get("title") or org.get("display_name") or org.get("name")
-        # org_id & org_homepage cannot yet be used with DCAT-AP+ / ChemDCAT-AP
-        # see also: https://github.com/nfdi-de/dcat-ap-plus/issues/84
-        org_id = org.get("id")
-        org_homepage = org.get("url")
-
-        publisher = Agent(name=org_name,
-                          type=Concept(preferred_label='Academia/Scientific organisation',
-                                       description='http://purl.org/adms/publishertype/Academia-ScientificOrganisation'))
-
-
-        # -------------------------
-        # Dataset
-        # -------------------------
         dataset = Dataset(
             id=dataset_id,
             title=dataset_dict.get("title"),
-            description=dataset_dict.get("notes") or "No description",
+            description=self._get_description(dataset_dict),
             identifier=dataset_id,
-            other_identifier=Identifier(notation=dataset_id),
-            release_date=dataset_dict.get('metadata_created').split('T')[0],
-            modification_date=dataset_dict.get('metadata_modified').split('T')[0],
-            creator=self._creator_agents(dataset_dict),
+            other_identifier=[Identifier(notation=dataset_id,
+                                         title="canonical ID",
+                                         description="The canonical ID of a dataset, either its DOI or the IRI to its"
+                                                     "source repository"),
+                              Identifier(notation=f"https://search.nfdi4chem.de/dataset/{raw_id}",
+                                         title="Search Service ID",
+                                         description="The id of this dataset within the NFDI4Chem Search Service "
+                                                     "(https://search.nfdi4chem.de/)")],
+            release_date=release_date,
+            modification_date=mod_date,
+            creator=creators,
             language=[language],
             publisher=publisher,
-            conforms_to=Standard(title='DCAT-AP PLUS', description='https://w3id.org/nfdi-de/dcat-ap-plus'),
+            applicable_legislation=legislation,
+            landing_page=landing_pages,
+            conforms_to=Standard(title='DCAT-AP-PLUS', description='https://w3id.org/nfdi-de/dcat-ap-plus'),
             was_generated_by=[measurement.id],
             is_about_entity=[sample.id],
         )
 
-
-        # -------------------------
-        # Landing Page
-        # -------------------------
-        if dataset_dict.get('url'):
-            dataset.landing_page = [Document(id=dataset_dict.get('url'))]
-
-        # -------------------------
-        # License
-        # -------------------------
-        if dataset_dict.get('license_title'):
-            title = dataset_dict.get('license_title')
-            license_url = f"{dataset_id}#license_notspecified"
-            if dataset_dict.get('license_id') != 'notspecified' and dataset_dict.get('license_url'):
-                license_url = dataset_dict.get('license_url')
-            dataset.applicable_legislation = [LegalResource(id=license_url, title=title)]
-        else:
-            pass
-
-
-        # -------------------------
-        # Build Graph
-        # -------------------------
-        sv_dcat_ap_plus = SchemaView(self._fetch_schema_yaml("https://w3id.org/nfdi-de/dcat-ap-plus/"),
-                                     merge_imports=True)
-
+        # 8. Serialize to Graph
         rdf_dumper = RDFLibDumper()
-
-        prefix_map = {'@base': 'https://search.nfdi4chem.de/dataset/',
-                      'CHEMINF': 'http://semanticscience.org/resource/CHEMINF_',
-                      'CHMO': 'http://purl.obolibrary.org/obo/CHMO_',
-                      'CHEBI': 'http://purl.obolibrary.org/obo/CHEBI_'
-                      }
+        prefix_map = {
+            'CHEMINF': 'http://semanticscience.org/resource/CHEMINF_',
+            'CHMO': 'http://purl.obolibrary.org/obo/CHMO_',
+            'CHEBI': 'http://purl.obolibrary.org/obo/CHEBI_'
+        }
 
         try:
-            graph = rdf_dumper.as_rdf_graph(dataset, schemaview=sv_dcat_ap_plus, prefix_map = prefix_map)
-            graph += rdf_dumper.as_rdf_graph(sample, schemaview=sv_dcat_ap_plus, prefix_map = prefix_map)
-            graph += rdf_dumper.as_rdf_graph(compound, schemaview=sv_dcat_ap_plus, prefix_map = prefix_map)
-            graph += rdf_dumper.as_rdf_graph(measurement, schemaview=sv_dcat_ap_plus, prefix_map = prefix_map)
-        except Exception as e:
-            log.warning("DCAT-AP PLUS serialization skipped: %s", e)
-            return None
+            graph = rdf_dumper.as_rdf_graph(dataset, schemaview=sv, prefix_map=prefix_map)
+            graph += rdf_dumper.as_rdf_graph(sample, schemaview=sv, prefix_map=prefix_map)
+            graph += rdf_dumper.as_rdf_graph(compound, schemaview=sv, prefix_map=prefix_map)
+            graph += rdf_dumper.as_rdf_graph(measurement, schemaview=sv, prefix_map=prefix_map)
 
-        for triple in graph:
-            self.g.add(triple)
+            for triple in graph:
+                self.g.add(triple)
+        except Exception as e:
+            log.error(f"RDF Serialization failed: {e}")
 
 
