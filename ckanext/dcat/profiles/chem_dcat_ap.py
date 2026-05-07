@@ -46,7 +46,7 @@ from .dcat_4c_ap import (
 log = logging.getLogger(__name__)
 
 
-class ChemDCATAPProfile(DCATAPPlusProfile):
+class ChemDCATAPProfile(DCATNFDi4ChemProfile):
     """
     ChemDCAT-AP Profile.
     Inherits all data extraction and helper logic from DCATAPPlusProfile.

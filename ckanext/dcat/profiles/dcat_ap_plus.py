@@ -26,7 +26,7 @@ from ckanext.dcat.profiles.dcat_4c_ap import (Agent,
                                               Standard,
                                               QualitativeAttribute,
                                               QuantitativeAttribute)
-from .euro_dcat_ap_2 import EuropeanDCATAP2Profile
+from . import EuropeanDCATAPProfile, EuropeanDCATAP2Profile
 log = logging.getLogger(__name__)
 
 from ckanext.dcat.utils import (
@@ -313,11 +313,11 @@ class Helpers(object):
 
 
 
-class DCATAPPlusProfile(Helpers, EuropeanDCATAP2Profile):
+class DCATNFDi4ChemProfile(Helpers, EuropeanDCATAPProfile):
     """
     An RDF profile extending DCAT-AP for NFDI4Chem that inherits helper methods from NFDI4ChemHelpers.
 
-    Extends the EuropeanDCATAP2Profile to support NFDI4Chem-specific fields.
+    Extends the EuropeanDCATAPProfile to support NFDI4Chem-specific fields.
     """
 
     def parse_dataset(self, dataset_dict, dataset_ref):
