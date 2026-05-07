@@ -179,7 +179,7 @@ class ChemDCATAPProfile(DCATNFDi4ChemProfile):
                                          title="canonical ID",
                                          description="The canonical ID of a dataset, either a DOI or the IRI to its"
                                                      "source repository"),
-                              Identifier(notation=f"https://search.nfdi4chem.de/dataset/{raw_id}",
+                              Identifier(notation=f"https://search.nfdi4chem.de/dataset/{dataset_dict.get("id", "").strip()}",
                                          title="Search Service ID",
                                          description="The id of this dataset within the NFDI4Chem Search Service "
                                                      "(https://search.nfdi4chem.de/)")],
