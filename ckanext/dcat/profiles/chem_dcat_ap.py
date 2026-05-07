@@ -1,4 +1,3 @@
-import requests
 import logging
 # Why do we need this here?
 from rdflib import term, URIRef, BNode, Literal, Graph
@@ -31,7 +30,8 @@ from .base import (RDF,
 from linkml_runtime.dumpers import RDFLibDumper
 
 # Import base class - the DCAT profile we are inheriting from
-from .dcat_ap_plus import DCATNFDi4ChemProfile
+from .dcat_ap_plus import Helpers
+from .euro_dcat_ap import EuropeanDCATAPProfile
 
 # Import ChemDCAT-AP specific dataclasses (Local copy for Python 3.7 compatibility)
 # NOTE: In the future, replace this with: from chem_dcat_ap.datamodel.chem_dcat_ap import ...
@@ -40,16 +40,16 @@ from .dcat_4c_ap import (
     SubstanceSampleCharacterizationDataset,
     SubstanceSampleCharacterization,
     InChi, InChIKey, IUPACName, SMILES, MolecularFormula, MolarMass,
-    ChemicalEntity, DefinedTerm, Identifier, Standard
+    ChemicalEntity, DefinedTerm, Standard
 )
 
 log = logging.getLogger(__name__)
 
 
-class ChemDCATAPProfile(DCATNFDi4ChemProfile):
+class ChemDCATAPProfile(Helpers, EuropeanDCATAPProfile):
     """
     ChemDCAT-AP Profile.
-    Inherits all data extraction and helper logic from DCATAPPlusProfile.
+    Inherits all data extraction and helper logic from DCATNFDi4ChemProfile.
     Only implements the specific ChemDCAT-AP graph construction.
     """
     def parse_dataset(self, dataset_dict, dataset_ref):

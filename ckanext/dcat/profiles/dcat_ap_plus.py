@@ -257,7 +257,7 @@ class Helpers(object):
         if dataset_dict.get("doi"):
             other_ids.append(Identifier(notation=dataset_dict.get("doi"),
                                         title="DOI",
-                                        description="The DOI of a dataset"))
+                                        description="The DOI of this dataset"))
         return other_ids
 
     def _get_compound_id(self, dataset_dict, dataset_id):
