@@ -247,6 +247,19 @@ class Helpers(object):
         raw_id = dataset_dict.get("id", "").strip()
         return f"https://search.nfdi4chem.de/dataset/{raw_id}"
 
+    def _get_other_ids(self, dataset_dict):
+        """Constructs a list of Identifier objects."""
+        raw_id = dataset_dict.get("id", "").strip()
+        other_ids = [Identifier(notation=f"https://search.nfdi4chem.de/dataset/{raw_id}",
+                                title="Search Service ID",
+                                description="The id of this dataset within the NFDI4Chem Search Service "
+                                            "(https://search.nfdi4chem.de/)")]
+        if dataset_dict.get("doi"):
+            other_ids.append(Identifier(notation=dataset_dict.get("doi"),
+                                        title="DOI",
+                                        description="The DOI of a dataset"))
+        return other_ids
+
     def _get_compound_id(self, dataset_dict, dataset_id):
         """Resolves the Compound IRI (PubChem CID or local fragment)."""
         cid = self._get_pubchem_cid(dataset_dict.get("inchi_key"), dataset_dict.get("smiles"))
@@ -441,14 +454,7 @@ class DCATNFDi4ChemProfile(Helpers, EuropeanDCATAPProfile):
             title=dataset_dict.get("title"),
             description=self._get_description(dataset_dict),
             identifier=dataset_id,
-            other_identifier=[Identifier(notation=dataset_id,
-                                         title="canonical ID",
-                                         description="The canonical ID of a dataset, either its DOI or the IRI to its"
-                                                     "source repository"),
-                              Identifier(notation=f"https://search.nfdi4chem.de/dataset/{dataset_dict.get("id", "").strip()}",
-                                         title="Search Service ID",
-                                         description="The id of this dataset within the NFDI4Chem Search Service "
-                                                     "(https://search.nfdi4chem.de/)")],
+            other_identifier=self._get_other_ids(dataset_dict),
             release_date=release_date,
             modification_date=mod_date,
             creator=creators,

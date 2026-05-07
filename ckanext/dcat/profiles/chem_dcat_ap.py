@@ -175,14 +175,7 @@ class ChemDCATAPProfile(DCATNFDi4ChemProfile):
             title=dataset_dict.get("title"),
             description=self._get_description(dataset_dict),
             identifier=dataset_id,
-            other_identifier=[Identifier(notation=dataset_id,
-                                         title="canonical ID",
-                                         description="The canonical ID of a dataset, either a DOI or the IRI to its"
-                                                     "source repository"),
-                              Identifier(notation=f"https://search.nfdi4chem.de/dataset/{dataset_dict.get("id", "").strip()}",
-                                         title="Search Service ID",
-                                         description="The id of this dataset within the NFDI4Chem Search Service "
-                                                     "(https://search.nfdi4chem.de/)")],
+            other_identifier= self._get_other_ids(dataset_dict),
             release_date=release_date,
             modification_date=mod_date,
             creator=creators,
