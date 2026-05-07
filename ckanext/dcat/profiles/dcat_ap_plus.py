@@ -26,7 +26,7 @@ from ckanext.dcat.profiles.dcat_4c_ap import (Agent,
                                               Standard,
                                               QualitativeAttribute,
                                               QuantitativeAttribute)
-from . import EuropeanDCATAPProfile, EuropeanDCATAP2Profile
+from .euro_dcat_ap import EuropeanDCATAPProfile
 log = logging.getLogger(__name__)
 
 from ckanext.dcat.utils import (
