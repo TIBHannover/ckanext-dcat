@@ -1,10 +1,9 @@
 import json
 import os
-from decimal import Decimal, DecimalException
+# from decimal import Decimal, DecimalException
 import requests
 from rdflib import term, URIRef, BNode, Literal, Graph
 import ckantoolkit as toolkit
-
 # from ckan.lib.munge import munge_tag
 import logging
 
@@ -36,7 +35,7 @@ from ckanext.dcat.utils import (
     DCAT_CLEAN_TAGS,
     publisher_uri_organization_fallback,
 )
-from .base import RDFProfile, URIRefOrLiteral, CleanedURIRef
+# from .base import RDFProfile, URIRefOrLiteral, CleanedURIRef
 from .base import (
     RDF,
     XSD,
@@ -314,11 +313,11 @@ class Helpers(object):
 
 
 
-class DCATAPPlusProfile(Helpers, EuropeanDCATAPProfile):
+class DCATNFDi4ChemProfile(Helpers, EuropeanDCATAP2Profile):
     """
     An RDF profile extending DCAT-AP for NFDI4Chem that inherits helper methods from NFDI4ChemHelpers.
 
-    Extends the EuropeanDCATAPProfile to support NFDI4Chem-specific fields.
+    Extends the EuropeanDCATAP2Profile to support NFDI4Chem-specific fields.
     """
 
     def parse_dataset(self, dataset_dict, dataset_ref):
