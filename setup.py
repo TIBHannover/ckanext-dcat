@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-version = '1.8.0'
+version = '1.8.1'
 
 setup(
     name='ckanext-dcat',
@@ -45,7 +45,6 @@ setup(
     euro_dcat_ap_2=ckanext.dcat.profiles:EuropeanDCATAP2Profile
     euro_dcat_ap_scheming=ckanext.dcat.profiles:EuropeanDCATAPSchemingProfile
     schemaorg=ckanext.dcat.profiles:SchemaOrgProfile
-    dcat_ap_nfdi4c=ckanext.dcat.profiles:NFDI4CAPProfile
     dcat_ap_plus=ckanext.dcat.profiles:DCATNFDi4ChemProfile
     chem_dcat_ap=ckanext.dcat.profiles:ChemDCATAPProfile
     
