@@ -119,7 +119,7 @@ class ChemDCATAPProfile(Helpers, EuropeanDCATAPProfile):
             )
         if dataset_dict.get("mol_formula"):
             compound_kwargs["molecular_formula"] = MolecularFormula(
-                title="assigned IUPAC chemical formula",
+                title="assigned molecular formula",
                 value=dataset_dict.get("mol_formula")
             )
         if dataset_dict.get("exactmass"):
