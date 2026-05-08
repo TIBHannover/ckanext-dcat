@@ -400,7 +400,7 @@ class DCATNFDi4ChemProfile(Helpers, EuropeanDCATAPProfile):
             compound.has_qualitative_attribute.append(QualitativeAttribute(
                 rdf_type=DefinedTerm(id='http://semanticscience.org/resource/CHEMINF_000042',
                                      title='molecular formula'),
-                title="assigned IUPAC chemical formula",
+                title="assigned molecular formula",
                 value=dataset_dict.get("mol_formula")
             ))
         if dataset_dict.get("iupacName"):
