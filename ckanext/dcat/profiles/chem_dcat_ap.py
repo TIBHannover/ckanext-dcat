@@ -171,6 +171,7 @@ class ChemDCATAPProfile(DCATAPPlusProfile):
             id=dataset_id,
             title=dataset_dict.get("title"),
             description=self._get_description(dataset_dict),
+            theme=self._get_theme(dataset_dict),
             identifier=dataset_id,
             other_identifier= self._get_other_ids(dataset_dict),
             release_date=release_date,

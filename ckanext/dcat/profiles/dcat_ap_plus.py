@@ -323,6 +323,15 @@ class Helpers(object):
 
         return clean_date(dataset_dict.get('metadata_created')), clean_date(dataset_dict.get('metadata_modified'))
 
+    def _get_theme(self, dataset_dict):
+        """Returns the SKOS Concept LinkML object for the dcat:theme property, which for NFDI4Chem is always an instance
+        from the EU Dataset Theme Vocabulary (http://publications.europa.eu/resource/authority/data-theme/) that is
+        mandated by the DCAT-AP specification.
+        TODO: We'll have to update DCAT-AP+ to allow providing the IRI of the concept directly instead of it as title.
+        """
+        theme = Concept(preferred_label="Science and technology",
+                        title="http://publications.europa.eu/resource/authority/data-theme/TECH")
+        return theme
 
 class DCATAPPlusProfile(Helpers, EuropeanDCATAPProfile):
     """
@@ -451,6 +460,7 @@ class DCATAPPlusProfile(Helpers, EuropeanDCATAPProfile):
             id=dataset_id,
             title=dataset_dict.get("title"),
             description=self._get_description(dataset_dict),
+            theme=self._get_theme(dataset_dict),
             identifier=dataset_id,
             other_identifier=self._get_other_ids(dataset_dict),
             release_date=release_date,
