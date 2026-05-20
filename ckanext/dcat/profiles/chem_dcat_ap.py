@@ -27,7 +27,7 @@ from .base import (RDF,
 from linkml_runtime.dumpers import RDFLibDumper
 
 # Import base class - the DCAT profile we are inheriting from
-from .dcat_ap_plus import Helpers
+from .dcat_ap_plus import DCATAPPlusProfile
 from .euro_dcat_ap import EuropeanDCATAPProfile
 
 # Import ChemDCAT-AP specific dataclasses (Local copy for Python 3.7 compatibility)
@@ -43,10 +43,10 @@ from .dcat_4c_ap import (
 log = logging.getLogger(__name__)
 
 
-class ChemDCATAPProfile(Helpers, EuropeanDCATAPProfile):
+class ChemDCATAPProfile(DCATAPPlusProfile):
     """
     ChemDCAT-AP Profile.
-    Inherits all data extraction and helper logic from DCATNFDi4ChemProfile.
+    Inherits all data extraction and helper logic from DCATAPPlusProfile.
     Only implements the specific ChemDCAT-AP graph construction.
     """
     def parse_dataset(self, dataset_dict, dataset_ref):

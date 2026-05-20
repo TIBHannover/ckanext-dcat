@@ -324,8 +324,7 @@ class Helpers(object):
         return clean_date(dataset_dict.get('metadata_created')), clean_date(dataset_dict.get('metadata_modified'))
 
 
-
-class DCATNFDi4ChemProfile(Helpers, EuropeanDCATAPProfile):
+class DCATAPPlusProfile(Helpers, EuropeanDCATAPProfile):
     """
     An RDF profile extending DCAT-AP for NFDI4Chem that inherits helper methods from NFDI4ChemHelpers.
 
